@@ -1,4 +1,9 @@
 #!/bin/bash
+###########
+#Test homework for shell parallel excution.
+#author: michael
+#date:	 2014-04-15
+###########
 function caculate()
 {
 	result=0
