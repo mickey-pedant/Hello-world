@@ -48,7 +48,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
         if (err)
                 bio_w->err |= err;
         if (atomic_dec_and_test(&bio_w->count)) {
-                pr_info("bio wrapper endio.");
+                pr_info("----------------------------XXbio wrapper endio.");
                 bio_endio(bio_w->bio, bio_w->err);
                 free_bio_wrapper(bio_w);
         }
@@ -198,9 +198,11 @@ void submit_bio_list(struct list_head *bio_list)
         /* at least one bio in the list */
         list_for_each_entry(bio_struct, bio_list, list) {
                 pr_info("===== submit bio =====");
+
                 bio = bio_struct->bio;
-                //dump_bio(bio, __FUNCTION__);
-                //msleep(1000);
+                pr_info("submit list bio: %p\n", bio);
+                // dump_bio(bio, __FUNCTION__);
+                // msleep(100);
                 /*
                    if (bio_data_dir(bio) == READ) {
                    buffer_data = find_get_bio_data(bio, bio_buffer);
@@ -226,8 +228,8 @@ void submit_bio_list(struct list_head *bio_list)
                 }
                 */
 
-                dump_bio(bio, __FUNCTION__);
-                //submit_bio(bio->bi_rw, bio);
+                //dump_bio(bio, __FUNCTION__);
+                submit_bio(bio->bi_rw, bio);
         }
         // hadm_bio_list_free(bio_list);
         // bio_endio(bio_w->bio, 0);       /* endio? */
@@ -438,7 +440,10 @@ void free_bio_struct(struct bio_struct *bio_struct)
 
         bio = bio_struct->bio;
         pr_info("bio idx:%u.\n", bio->bi_idx);
-        __bio_for_each_segment(bvec, bio, i, 0) {    /* TODO check it later */
+        /**
+         * FIXME
+         */
+        bio_for_each_segment(bvec, bio, i) {
                 __free_page(bvec->bv_page);
         }
         bio_put(bio);

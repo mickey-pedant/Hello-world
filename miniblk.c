@@ -35,13 +35,15 @@ int wrapper_run(void *data)
                         bio_wrapper_add_meta();
                 }
 
+                if (!count) {
+                        msleep(1000);
+                }
                 pr_info("get wrapper ok, count:%llu|bio:%p\n", ++count, bio_wrapper->bio);
-                // msleep(1000);
 
                 submit_bio_list(&bio_wrapper->bio_list);
-                bio_wrapper->bio->bi_bdev = minidev->bdev;
-                generic_make_request(bio_wrapper->bio);
-                free_bio_wrapper(bio_wrapper);
+                // bio_wrapper->bio->bi_bdev = minidev->bdev;
+                // generic_make_request(bio_wrapper->bio);
+                // free_bio_wrapper(bio_wrapper);
                 // msleep(100);
         }
 
