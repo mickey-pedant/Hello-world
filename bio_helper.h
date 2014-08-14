@@ -7,6 +7,7 @@
 struct bio_struct {
         struct bio *bio;
         sector_t sector;
+        int idx;
 
         struct list_head list;
 };
@@ -42,9 +43,9 @@ struct bio;
 int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
                 struct block_device *bdev);
 // struct bio_list *hadm_bio_split(struct bio *bio_src);
-void hadm_bio_list_free(struct bio_list *bio_list);
-void hadm_bio_list_dump(struct bio_list *bio_list);
-void submit_bio_list(struct bio_list *bio_list);
+void hadm_bio_list_free(struct list_head *bio_list);
+void hadm_bio_list_dump(struct bio_list *bio_list); /* FIXME */
+void submit_bio_list(struct list_head *bio_list);
 void free_bio_wrapper(struct bio_wrapper *bio_w);
 void hadm_bio_end_io(struct bio *bio, int err);
 
@@ -60,8 +61,10 @@ void dump_bio_wrapper(struct bio *bio);
 
 void pr_c_content(void *addr, unsigned int size);
 void pr_content(void *addr, unsigned int size);
-void dump_bio(struct bio *bio);
+void dump_bio(struct bio *bio, const char *msg);
+void dump_wrapper_list(struct bio_wrapper_list *wrapper_list, const char *msg);
 
-struct bio_struct *init_bio_struct(struct bio* bio);
+struct bio_struct *init_bio_struct(struct bio* bio, int idx);
+void free_bio_struct(struct bio_struct *bio_struct);
 
 #endif // __BIO_HELPER_H__

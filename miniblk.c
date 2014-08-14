@@ -17,6 +17,7 @@ static struct block_device_operations minidev_fops = {
 int wrapper_run(void *data)
 {
         struct bio_wrapper *bio_wrapper;
+        uint64_t count = 0;
 
         while(!kthread_should_stop()) {
                 while ((bio_wrapper = bio_wrapper_list_get(bio_wrapper_list)) == NULL) {
@@ -28,25 +29,20 @@ int wrapper_run(void *data)
                         }
                 }
 
-
-                if (bio_wrapper == NULL) {
-                        pr_info("wrapper list is empty sleep.\n");
-                        msleep(1000);
-                        continue;
-                }
-
-                dump_bio_wrapper(bio_wrapper->bio);
+                // dump_wrapper_list(bio_wrapper_list, __FUNCTION__);
+                // dump_bio_wrapper(bio_wrapper->bio);
                 if (bio_data_dir(bio_wrapper->bio) == WRITE) {
                         bio_wrapper_add_meta();
                 }
 
-//                bio_wrapper->bio->bi_bdev = minidev->bdev;
-//                generic_make_request(bio_wrapper->bio);
-//
-//                free_bio_wrapper(bio_wrapper);
-                pr_info("get wrapper ok\n");
-                submit_bio_list(bio_wrapper->bio_list);
-                //msleep(100);
+                pr_info("get wrapper ok, count:%llu|bio:%p\n", ++count, bio_wrapper->bio);
+                // msleep(1000);
+
+                submit_bio_list(&bio_wrapper->bio_list);
+                bio_wrapper->bio->bi_bdev = minidev->bdev;
+                generic_make_request(bio_wrapper->bio);
+                free_bio_wrapper(bio_wrapper);
+                // msleep(100);
         }
 
         return 0;
@@ -56,9 +52,10 @@ int wrapper_run(void *data)
 static int minidev_make_request(struct request_queue *q, struct bio *bio)
 {
         int ret;
+        static uint64_t count = 0;
         struct bio_wrapper *wrapper;
 
-        dump_bio(bio);
+        //dump_bio(bio, __FUNCTION__);
         wrapper = init_bio_wrapper(bio, hadm_bio_end_io, minidev->bdev);
         if (wrapper == NULL) {
                 bio_endio(bio, -EIO);
@@ -70,7 +67,9 @@ static int minidev_make_request(struct request_queue *q, struct bio *bio)
                 bio_endio(bio, -EIO);
                 pr_info("bio_wrapper_list full.\n");
         }
+        pr_info("make request handler count: %llu.bio:%p\n", ++count, bio);
 
+        //dump_wrapper_list(bio_wrapper_list, __FUNCTION__);
         //free_bio_wrapper(wrapper);
 	// invalidate_mapping_pages(minidev->bdev->bd_inode->i_mapping, 0, -1);
 	// dump_bio(bio);

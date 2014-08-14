@@ -4,30 +4,45 @@
 #include <linux/buffer_head.h>
 #include <linux/kthread.h>
 #include <linux/bio.h>
+#include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/delay.h>
+#include <linux/bio.h>
 
 #include "bio_helper.h"
 
 void hadm_bio_end_io(struct bio *bio, int err)
 {
-        int i;
         struct bio_wrapper *bio_w;
-        struct bio_vec *bvec;
+        struct bio_struct *iter;
+        struct bio_struct *bio_struct = NULL;
 
 	bio_w = bio->bi_private;
 
 	pr_info("handler bio READ begin");
-	if(bio_data_dir(bio_w->bio) == READ) {
-		bio_for_each_segment(bvec, bio_w->bio, i) {
-			pr_info("sector (%lu, %lu) %d", bio->bi_sector, bio_w->bio->bi_sector, i);
-                        //memset(page_address(bvec->bv_page), 'C', PAGE_SIZE);
-			if(bio->bi_sector == bio_w->bio->bi_sector + 8 * i + 1) {
-				pr_info("copy bio data\n");
-                                pr_c_content(page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
-				memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
-			}
-		}
-	}
+        if(0) {
+        //if(bio_data_dir(bio_w->bio) == READ) {
+                list_for_each_entry(iter, &bio_w->bio_list, list) {
+                        if (iter->bio == bio) {
+                                bio_struct = iter;
+                        }
+                }
+
+                //memset(page_address(bvec->bv_page), 'C', PAGE_SIZE);
+                /**
+                 * TODO check sector
+                 */
+                if (bio_struct == NULL) {
+                        pr_info("bug, can't find origin bio_struct.\n");
+                } else {
+                        pr_info("copy bio data\n");
+                        pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
+                        //memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
+                        memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
+                                        page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+                        //memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+                }
+        }
 	pr_info("handler bio READ end");
 
         if (err)
@@ -43,21 +58,13 @@ void hadm_bio_end_io(struct bio *bio, int err)
 
 void hadm_bio_list_free(struct list_head *bio_list)
 {
-	struct bio *bio;
-	struct bio_vec *bvec;
         struct bio_struct *bio_struct;
         struct bio_struct *temp;
-	int i;
 
-        list_for_each_entry_safty(bio_struct, temp, bio_list, list) {
-                bio = bio_list_pop(bio_list);
-                pr_info("bio idx:%u.\n", bio->bi_idx);
-                __bio_for_each_segment(bvec, bio, i, 0) {    /* TODO check it later */
-                        __free_page(bvec->bv_page);
-                }
-                bio_put(bio);
+        list_for_each_entry_safe(bio_struct, temp, bio_list, list) {
+                list_del(&bio_struct->list);
+                free_bio_struct(bio_struct);
         }
-        kfree(bio_list);
 }
 
 int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
@@ -82,7 +89,7 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
 
         bio_src = wrapper->bio;
 	bio_for_each_segment(bvec, bio_src, i) {
-                pr_info("---------------split bio--------------------\n");
+                //pr_info("---------------split bio--------------------\n");
 		bio = bio_alloc(GFP_NOIO, 1);
 		if(bio == NULL) {
 			goto err_bio;
@@ -116,16 +123,21 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
 			goto err_bio;
 		}
 
-                dump_bio(bio);
-                pr_info("---------------split bio end-------");
-                bio_struct = init_bio_struct(bio);
+                //dump_bio(bio, __FUNCTION__);
+                bio_struct = init_bio_struct(bio, i);
                 if (bio_struct == NULL) {
                         goto err_bio;
                 }
 
-                list_add_tail(&bio_struct->list, &bio_wrapper->bio_list);
+                list_add_tail(&bio_struct->list, &wrapper->bio_list);
+                //pr_info("---------------split bio end-------");
 		//bio_list_add(bio_list, bio);
 	}
+
+        pr_info("after split bio, wrapper count:%d.\n", atomic_read(&wrapper->count));
+        list_for_each_entry(bio_struct, &wrapper->bio_list, list) {
+                pr_info("->%p", bio_struct->bio);
+        }
 
 	return 0;
 
@@ -135,7 +147,7 @@ err_bio:
 	return -1;
 }
 
-void hadm_bio_list_dump(struct bio_list *bio_list)
+void hadm_bio_list_dump(struct bio_list *bio_list)      /* FIXME */
 {
 	struct bio_vec *bvec;
 	int i;
@@ -164,6 +176,7 @@ struct bio_wrapper *alloc_bio_wrapper(void)
 		return NULL;
 	}
 
+        INIT_LIST_HEAD(&bio_w->bio_list);
         INIT_LIST_HEAD(&bio_w->list);
 
         return bio_w;
@@ -171,23 +184,23 @@ struct bio_wrapper *alloc_bio_wrapper(void)
 
 void free_bio_wrapper(struct bio_wrapper *bio_w)
 {
-        hadm_bio_list_free(bio_w->bio_list);
+        hadm_bio_list_free(&bio_w->bio_list);
 	kfree(bio_w);
 }
 
-void submit_bio_list(struct bio_list *bio_list)
+void submit_bio_list(struct list_head *bio_list)
 {
 	struct bio *bio;
-	struct bio_wrapper *bio_w;
+        struct bio_struct *bio_struct;
         //void *src_addr;
         //void *dst_addr;
 
-	bio = bio_list->head;
-	bio_w = bio->bi_private;
-
         /* at least one bio in the list */
-	while (bio != NULL) {
+        list_for_each_entry(bio_struct, bio_list, list) {
                 pr_info("===== submit bio =====");
+                bio = bio_struct->bio;
+                //dump_bio(bio, __FUNCTION__);
+                //msleep(1000);
                 /*
                    if (bio_data_dir(bio) == READ) {
                    buffer_data = find_get_bio_data(bio, bio_buffer);
@@ -213,8 +226,8 @@ void submit_bio_list(struct bio_list *bio_list)
                 }
                 */
 
-                submit_bio(bio->bi_rw, bio);
-                bio = bio->bi_next;
+                dump_bio(bio, __FUNCTION__);
+                //submit_bio(bio->bi_rw, bio);
         }
         // hadm_bio_list_free(bio_list);
         // bio_endio(bio_w->bio, 0);       /* endio? */
@@ -292,8 +305,8 @@ int bio_add_meta_page(struct bio *bio)
 
 struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io, struct block_device *bdev)
 {
+        int ret;
         struct bio_wrapper *wrapper;
-        struct bio_list *bio_list;
 
         wrapper = alloc_bio_wrapper();
         if (wrapper == NULL) {
@@ -304,13 +317,11 @@ struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io, stru
         wrapper->end_io = end_io;
         atomic_set(&wrapper->count, bio->bi_vcnt);
 
-        bio_list = hadm_bio_split(wrapper, end_io, bdev);
-        if (bio_list == NULL) {
+        ret = hadm_bio_split(wrapper, end_io, bdev);
+        if (ret < 0) {
                 kfree(wrapper);
                 return NULL;
         }
-
-        wrapper->bio_list = bio_list;
 
         return wrapper;
 }
@@ -342,17 +353,17 @@ void pr_c_content(void *addr, unsigned int size)
         printk("\n");
 }
 
-void dump_bio(struct bio *bio)
+void dump_bio(struct bio *bio, const char *msg)
 {
 	// struct bio_vec *bvec;
 	// int i;
 
-	pr_info("=========bio================");
+	pr_info("=========%s================", msg);
 	pr_info("bio->sector = %lu", (unsigned long)bio->bi_sector);
 	pr_info("bio->bi_vcnt = %u", bio->bi_vcnt);
 	pr_info("bio->bi_idx = %u", bio->bi_idx);
 	pr_info("bio->bi_size = %u", bio->bi_size);
-	pr_info("=========================");
+	pr_info("=========%s=================", msg);
 	/*
 	bio_for_each_segment(bvec, bio, i) {
 		pr_info("bvec index = %d", i);
@@ -386,7 +397,7 @@ void dump_bio_wrapper(struct bio *bio)
 	*/
 }
 
-struct bio_struct *init_bio_struct(struct bio* bio)
+struct bio_struct *init_bio_struct(struct bio* bio, int idx)
 {
         struct bio_struct *bio_struct;
 
@@ -398,8 +409,38 @@ struct bio_struct *init_bio_struct(struct bio* bio)
 
         INIT_LIST_HEAD(&bio_struct->list);
         bio_struct->bio = bio;
+        bio_struct->idx = idx;
         bio_struct->sector = bio->bi_sector;
 
         return bio_struct;
 }
 
+void dump_wrapper_list(struct bio_wrapper_list *wrapper_list, const char *msg)
+{
+        struct bio_wrapper *wrapper;
+
+        pr_info("=========%s dump start=================", msg);
+        pr_info("wrapper_list:\n"
+                        "count: %lu, maxsize: %lu.\n",
+                        (unsigned long)wrapper_list->count, (unsigned long)wrapper_list->maxsize);
+
+        list_for_each_entry(wrapper, &wrapper_list->bio_wrapper, list) {
+                pr_info("--wrapper:%p, bio:%p-->", wrapper, wrapper->bio);
+        }
+        pr_info("=========%s dump end=================", msg);
+}
+
+void free_bio_struct(struct bio_struct *bio_struct)
+{
+        int i;
+        struct bio *bio;
+        struct bio_vec *bvec;
+
+        bio = bio_struct->bio;
+        pr_info("bio idx:%u.\n", bio->bi_idx);
+        __bio_for_each_segment(bvec, bio, i, 0) {    /* TODO check it later */
+                __free_page(bvec->bv_page);
+        }
+        bio_put(bio);
+        kfree(bio_struct);
+}
