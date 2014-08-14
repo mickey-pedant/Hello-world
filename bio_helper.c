@@ -13,6 +13,7 @@
 
 void hadm_bio_end_io(struct bio *bio, int err)
 {
+        void *src;
         struct bio_wrapper *bio_w;
         struct bio_struct *iter;
         struct bio_struct *bio_struct = NULL;
@@ -20,8 +21,8 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	bio_w = bio->bi_private;
 
 	pr_info("handler bio READ begin");
-        if(0) {
-        //if(bio_data_dir(bio_w->bio) == READ) {
+        //if(0) {
+        if(bio_data_dir(bio_w->bio) == READ) {
                 list_for_each_entry(iter, &bio_w->bio_list, list) {
                         if (iter->bio == bio) {
                                 bio_struct = iter;
@@ -38,8 +39,13 @@ void hadm_bio_end_io(struct bio *bio, int err)
                         pr_info("copy bio data\n");
                         pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
                         //memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
-                        memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
-                                        page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+                        src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
+                        if (src == NULL) {
+                                pr_info("BUG!!!!!!!!!! src is NULL.");
+                        } else {
+                                memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
+                                                page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+                        }
                         //memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
                 }
         }
@@ -197,12 +203,13 @@ void submit_bio_list(struct list_head *bio_list)
 
         /* at least one bio in the list */
         list_for_each_entry(bio_struct, bio_list, list) {
-                pr_info("===== submit bio =====");
+                //pr_info("===== submit bio =====");
 
                 bio = bio_struct->bio;
-                pr_info("submit list bio: %p\n", bio);
+                //pr_info("submit list bio: %p\n", bio);
                 // dump_bio(bio, __FUNCTION__);
-                // msleep(100);
+                schedule();             /* FIXME XXOOXX */
+                //msleep(10);
                 /*
                    if (bio_data_dir(bio) == READ) {
                    buffer_data = find_get_bio_data(bio, bio_buffer);
@@ -377,7 +384,7 @@ void dump_bio(struct bio *bio, const char *msg)
 	*/
 }
 
-void dump_bio_wrapper(struct bio *bio)
+void __dump_bio_wrapper(struct bio *bio)
 {
 	// struct bio_vec *bvec;
 	// int i;
@@ -448,4 +455,17 @@ void free_bio_struct(struct bio_struct *bio_struct)
         }
         bio_put(bio);
         kfree(bio_struct);
+}
+
+void dump_bio_wrapper(struct bio_wrapper *bio_wrapper)
+{
+        struct bio_struct *bio_struct;
+
+        pr_info("--------dump_bio_wrapper start:-----------\n");
+        pr_info("wrapper bio:%p\n", bio_wrapper->bio);
+        list_for_each_entry(bio_struct, &bio_wrapper->bio_list, list) {
+                pr_info("bio_struct:%p, bio:%p, sector:%lu.\n",
+                                bio_struct, bio_struct->bio, bio_struct->sector);
+        }
+        pr_info("--------dump_bio_wrapper end:-----------\n");
 }

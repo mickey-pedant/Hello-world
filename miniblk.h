@@ -5,7 +5,7 @@
 #include <net/sock.h>
 
 #define MINIDEV_NAME		"minibd"
-#define MINIDEV_BDEV		"/dev/sda"
+#define MINIDEV_BDEV		"/dev/sdb"
 
 struct minidev {
         struct task_struct *task;

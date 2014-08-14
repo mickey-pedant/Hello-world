@@ -57,12 +57,13 @@ struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io, stru
 
 int bio_wrapper_add_meta(void);
 int bio_add_meta_page(struct bio *bio);
-void dump_bio_wrapper(struct bio *bio);
+//void dump_bio_wrapper(struct bio *bio);
 
 void pr_c_content(void *addr, unsigned int size);
 void pr_content(void *addr, unsigned int size);
 void dump_bio(struct bio *bio, const char *msg);
 void dump_wrapper_list(struct bio_wrapper_list *wrapper_list, const char *msg);
+void dump_bio_wrapper(struct bio_wrapper *bio_wrapper);
 
 struct bio_struct *init_bio_struct(struct bio* bio, int idx);
 void free_bio_struct(struct bio_struct *bio_struct);
