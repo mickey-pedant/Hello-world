@@ -6,11 +6,12 @@
 
 #define MINIDEV_NAME		"minibd"
 #define MINIDEV_BDEV		"/dev/sdb"
+#define SRLDEV_BDEV                 "/dev/sda"
 struct srl {
         sector_t head;
         sector_t tail;
         spinlock_t lock;
-        struct block_device *srl_bdev;
+        struct block_device *bdev;
 };
 
 struct minidev {

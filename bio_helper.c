@@ -464,7 +464,7 @@ void dump_bio_wrapper(struct bio_wrapper *bio_wrapper)
         pr_info("--------dump_bio_wrapper start:-----------\n");
         pr_info("wrapper bio:%p\n", bio_wrapper->bio);
         list_for_each_entry(bio_struct, &bio_wrapper->bio_list, list) {
-                pr_info("bio_struct:%p, bio:%p, sector:%lu.\n",
+                pr_info("bio_struct:%p, bio:%p, sector:%llu.\n",
                                 bio_struct, bio_struct->bio, bio_struct->sector);
         }
         pr_info("--------dump_bio_wrapper end:-----------\n");

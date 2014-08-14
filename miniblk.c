@@ -14,6 +14,27 @@ static struct block_device_operations minidev_fops = {
 	.owner = THIS_MODULE,
 };
 
+struct block_device *blkdev_get_by_path(const char *path, fmode_t mode, void *holder)
+{
+        struct block_device *bdev;
+        int err;
+
+        bdev = lookup_bdev(path);
+        if (IS_ERR(bdev))
+                return bdev;
+
+        err = blkdev_get(bdev, mode);
+        if (err)
+                return ERR_PTR(err);
+
+        if ((mode & FMODE_WRITE) && bdev_read_only(bdev)) {
+                blkdev_put(bdev, mode);
+                return ERR_PTR(-EACCES);
+        }
+
+        return bdev;
+}
+
 int wrapper_run(void *data)
 {
         struct bio_wrapper *bio_wrapper;
@@ -78,7 +99,29 @@ static int minidev_make_request(struct request_queue *q, struct bio *bio)
         return 0;
 }
 
-static int init_minidev(struct minidev *dev)
+static struct srl *init_srl(const char *disk)
+{
+        struct srl *srl;
+        struct block_device *bdev;
+
+        srl = kzalloc(sizeof(struct srl), GFP_KERNEL);
+        if (srl == NULL)
+                return NULL;
+
+        bdev = blkdev_get_by_path(MINIDEV_BDEV, FMODE_READ | FMODE_WRITE, minidev);
+        if(IS_ERR(bdev)) {
+                printk(KERN_INFO "open bdev fail!");
+                goto err_bdev;
+        }
+        srl->bdev = bdev;
+
+        return srl;
+err_bdev:
+        kfree(srl);
+        return NULL;
+}
+
+static int init_minidev(struct minidev *dev, struct srl *srl)
 {
 	int ret = 0;
 	struct request_queue *q;
@@ -121,6 +164,7 @@ static int init_minidev(struct minidev *dev)
         }
         set_capacity(dev->disk, i_size_read(bdev->bd_inode) >> 9);
         dev->bdev = bdev;
+        dev->srl = srl;
 
         return 0;
 
@@ -139,19 +183,27 @@ static int __init minidev_init(void)
 {
 	int ret = 0;
         struct task_struct *task;
+        struct srl *srl = NULL;
 
         bio_wrapper_list = init_bio_wrapper_list(MAX_BIO_WRAPPER_LIST_SIZE);
         if (bio_wrapper_list == NULL) {
                 goto fail;
         }
 
+        srl = init_srl(SRLDEV_BDEV);
+        if (srl == NULL) {
+                return -ENOMEM;
+        }
+
 	minidev = kzalloc(sizeof(struct minidev), GFP_KERNEL);
 	if(!minidev) {
-		return -ENOMEM;
+		ret = -ENOMEM;
+                goto fail;
 	}
 
         pr_info("ready init minidev.\n");
-	ret = init_minidev(minidev);
+        /* FIXME */
+	ret = init_minidev(minidev, srl);
 	if(ret) {
 		goto fail;
 	}
@@ -168,6 +220,7 @@ static int __init minidev_init(void)
 	return 0;
 
 fail:
+        kfree(srl);
 	kfree(minidev);
 	return ret;
 }
