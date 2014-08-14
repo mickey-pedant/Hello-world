@@ -6,6 +6,12 @@
 
 #define MINIDEV_NAME		"minibd"
 #define MINIDEV_BDEV		"/dev/sdb"
+struct srl {
+        sector_t head;
+        sector_t tail;
+        spinlock_t lock;
+        struct block_device *srl_bdev;
+};
 
 struct minidev {
         struct task_struct *task;
@@ -13,6 +19,7 @@ struct minidev {
 	struct request_queue *rq;
 	dev_t major;
 	struct block_device *bdev;
+        struct srl *srl;
 };
 
 #endif // __HABD_H__
