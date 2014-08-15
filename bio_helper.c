@@ -110,11 +110,11 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 
                 if (bio_data_dir(bio) == WRITE) {
                         bio_add_meta_page(bio);
-                        bio->bi_bdev = minidev->bdev;
+                        bio->bi_bdev = minidev->srl->bdev;
                         bio->bi_sector = srl_tail(minidev->srl);
                         srl_tail_inc(minidev->srl);
                 } else {
-                        bio->bi_bdev = minidev->srl->bdev;
+                        bio->bi_bdev = minidev->bdev;
                         bio->bi_sector = bio_src->bi_sector + 8 * i;
                 }
 
@@ -465,7 +465,7 @@ void dump_bio_wrapper(struct bio_wrapper *bio_wrapper)
         pr_info("--------dump_bio_wrapper start:-----------\n");
         pr_info("wrapper bio:%p\n", bio_wrapper->bio);
         list_for_each_entry(bio_struct, &bio_wrapper->bio_list, list) {
-                pr_info("bio_struct:%p, bio:%p, sector:%llu.\n",
+                pr_info("bio_struct:%p, bio:%p, sector:%lu.\n",
                                 bio_struct, bio_struct->bio, bio_struct->sector);
         }
         pr_info("--------dump_bio_wrapper end:-----------\n");

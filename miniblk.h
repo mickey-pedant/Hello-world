@@ -6,7 +6,7 @@
 
 #define MINIDEV_NAME		"minibd"
 #define MINIDEV_BDEV		"/dev/sdb"
-#define SRLDEV_BDEV                 "/dev/sda"
+#define SRLDEV_BDEV             "/dev/sda"
 struct srl {
         sector_t head;
         sector_t tail;
