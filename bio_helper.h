@@ -80,4 +80,5 @@ void free_bio_struct(struct bio_struct *bio_struct);
 int bio_add_meta_page(struct bio *bio);
 sector_t srl_tail(struct srl *srl);
 void srl_tail_inc(struct srl *srl);
+void bio_free_page(struct bio *bio);
 #endif // __BIO_HELPER_H__

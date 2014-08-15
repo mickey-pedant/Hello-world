@@ -107,20 +107,27 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 		bio->bi_rw = bio_src->bi_rw;
 		bio->bi_private = wrapper;
 		bio->bi_end_io = bi_end_io;
+                bio->bi_sector = bio_src->bi_sector + 8 * i;
 
                 if (bio_data_dir(bio) == WRITE) {
-                        bio_add_meta_page(bio);
+                        if (bio_add_meta_page(bio) != 0) {
+                                pr_info("add meta failed.\n");
+                                bio_put(bio);
+                                goto err_bio;
+                        }
+
                         bio->bi_bdev = minidev->srl->bdev;
                         bio->bi_sector = srl_tail(minidev->srl);
                         srl_tail_inc(minidev->srl);
+                        pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
                 } else {
                         bio->bi_bdev = minidev->bdev;
-                        bio->bi_sector = bio_src->bi_sector + 8 * i;
                 }
 
 		page = alloc_page(GFP_KERNEL);
 		if(page == NULL) {
-			bio_put(bio);
+                        bio_free_page(bio);
+                        bio_put(bio);
 			goto err_bio;
 		}
 
@@ -129,7 +136,8 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 		memcpy(addr, addr_src, PAGE_SIZE);
 
 		if(bio_add_page(bio, page, bvec->bv_len, bvec->bv_offset) == 0) {
-			__free_page(page);
+                        __free_page(page);
+                        bio_free_page(bio);
 			bio_put(bio);
 			goto err_bio;
 		}
@@ -137,6 +145,8 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
                 //dump_bio(bio, __FUNCTION__);
                 bio_struct = init_bio_struct(bio, i);
                 if (bio_struct == NULL) {
+                        bio_free_page(bio);
+			bio_put(bio);
                         goto err_bio;
                 }
 
@@ -212,7 +222,11 @@ void submit_bio_list(struct list_head *bio_list)
 
                 bio = bio_struct->bio;
                 //pr_info("submit list bio: %p\n", bio);
-                // dump_bio(bio, __FUNCTION__);
+                dump_bio(bio, __FUNCTION__);
+                if (bio_data_dir(bio) == WRITE) {
+                        pr_content(page_address(bio->bi_io_vec[0].bv_page), 512);
+                        pr_c_content(page_address(bio->bi_io_vec[1].bv_page), 512);
+                }
                 schedule();             /* FIXME XXOOXX */
                 //msleep(10);
                 /*
@@ -373,6 +387,8 @@ void dump_bio(struct bio *bio, const char *msg)
 	pr_info("bio->bi_vcnt = %u", bio->bi_vcnt);
 	pr_info("bio->bi_idx = %u", bio->bi_idx);
 	pr_info("bio->bi_size = %u", bio->bi_size);
+        pr_info("bio->bi_bdev = %p", bio->bi_bdev);
+        pr_info("bio->bi_rw = %s", bio->bi_rw & 1 ? "write" : "read");
 	pr_info("=========%s=================", msg);
 	/*
 	bio_for_each_segment(bvec, bio, i) {
@@ -502,6 +518,9 @@ int bio_add_meta_page(struct bio *bio)
                 goto err;
         }
 
+        pr_info("add meta success, meta->sector:%lu.\n",
+                        meta->disk_sector);
+        //pr_content(meta, 512);
         return 0;
 
 err:
@@ -518,3 +537,14 @@ void srl_tail_inc(struct srl *srl)
 {
         srl->tail += (META_SIZE + PAGE_SIZE) >> BLK_SHIFT;
 }
+
+void bio_free_page(struct bio *bio)
+{
+        int i;
+        struct bio_vec *bvec;
+
+        bio_for_each_segment(bvec, bio, i) {
+                __free_page(bvec->bv_page);
+        }
+}
+

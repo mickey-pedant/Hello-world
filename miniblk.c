@@ -108,12 +108,14 @@ static struct srl *init_srl(const char *disk)
         if (srl == NULL)
                 return NULL;
 
-        bdev = blkdev_get_by_path(MINIDEV_BDEV, FMODE_READ | FMODE_WRITE, minidev);
+        bdev = blkdev_get_by_path(disk, FMODE_READ | FMODE_WRITE, minidev);
         if(IS_ERR(bdev)) {
                 printk(KERN_INFO "open bdev fail!");
                 goto err_bdev;
         }
         srl->bdev = bdev;
+        srl->tail = 0;
+        srl->head = 0;
 
         return srl;
 err_bdev:
@@ -210,6 +212,8 @@ static int __init minidev_init(void)
 
 	add_disk(minidev->disk);
 	printk(KERN_INFO "miniblk init!\n");
+        pr_info("disk bdev:%p, srl bdev: %p.\n",
+                        minidev->bdev, minidev->srl->bdev);
 
         task = kthread_run(wrapper_run, NULL, "wrapper_worker");
         if (task == NULL || IS_ERR(task)) {
