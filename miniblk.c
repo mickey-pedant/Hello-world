@@ -7,7 +7,7 @@
 #include "miniblk.h"
 #include "bio_helper.h"
 
-static struct minidev *minidev;
+struct minidev *minidev;
 static struct bio_wrapper_list *bio_wrapper_list;
 
 static struct block_device_operations minidev_fops = {
@@ -77,7 +77,7 @@ static int minidev_make_request(struct request_queue *q, struct bio *bio)
         struct bio_wrapper *wrapper;
 
         //dump_bio(bio, __FUNCTION__);
-        wrapper = init_bio_wrapper(bio, hadm_bio_end_io, minidev->bdev);
+        wrapper = init_bio_wrapper(bio, hadm_bio_end_io);
         if (wrapper == NULL) {
                 bio_endio(bio, -EIO);
                 pr_info("wrapper init failed.\n");

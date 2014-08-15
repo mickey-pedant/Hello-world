@@ -11,6 +11,8 @@
 
 #include "bio_helper.h"
 
+extern struct minidev *minidev;
+
 void hadm_bio_end_io(struct bio *bio, int err)
 {
         void *src;
@@ -73,8 +75,7 @@ void hadm_bio_list_free(struct list_head *bio_list)
         }
 }
 
-int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
-                struct block_device *bdev)
+int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 {
         struct list_head *bio_list = &wrapper->bio_list;
 	//struct bio_list *bio_list;
@@ -101,9 +102,7 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
 			goto err_bio;
 		}
 
-		bio->bi_sector = bio_src->bi_sector + 8 * i;
-		// bio->bi_bdev = bio_src->bi_bdev;
-		bio->bi_bdev = bdev;
+		bio->bi_bdev = bio_src->bi_bdev;
 		bio->bi_flags = bio_src->bi_flags;
 		bio->bi_rw = bio_src->bi_rw;
 		bio->bi_private = wrapper;
@@ -111,6 +110,12 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io,
 
                 if (bio_data_dir(bio) == WRITE) {
                         bio_add_meta_page(bio);
+                        bio->bi_bdev = minidev->bdev;
+                        bio->bi_sector = srl_tail(minidev->srl);
+                        srl_tail_inc(minidev->srl);
+                } else {
+                        bio->bi_bdev = minidev->srl->bdev;
+                        bio->bi_sector = bio_src->bi_sector + 8 * i;
                 }
 
 		page = alloc_page(GFP_KERNEL);
@@ -307,12 +312,8 @@ int bio_wrapper_add_meta(void)
 /**
  * add meta page at bio->bi_io_vec[bio->bi_idx]
  */
-int bio_add_meta_page(struct bio *bio)
-{
-        return 0;
-}
 
-struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io, struct block_device *bdev)
+struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io)
 {
         int ret;
         struct bio_wrapper *wrapper;
@@ -326,7 +327,7 @@ struct bio_wrapper *init_bio_wrapper(struct bio *bio, bio_end_io_t *end_io, stru
         wrapper->end_io = end_io;
         atomic_set(&wrapper->count, bio->bi_vcnt);
 
-        ret = hadm_bio_split(wrapper, end_io, bdev);
+        ret = hadm_bio_split(wrapper, end_io);
         if (ret < 0) {
                 kfree(wrapper);
                 return NULL;
@@ -468,4 +469,52 @@ void dump_bio_wrapper(struct bio_wrapper *bio_wrapper)
                                 bio_struct, bio_struct->bio, bio_struct->sector);
         }
         pr_info("--------dump_bio_wrapper end:-----------\n");
+}
+
+struct meta *init_meta(struct bio *bio)
+{
+        struct meta *meta;
+
+        meta = kzalloc(sizeof(struct meta), GFP_KERNEL);
+        if (meta == NULL)
+                return NULL;
+
+        meta->disk_sector = bio->bi_sector;
+        return meta;
+}
+
+int bio_add_meta_page(struct bio *bio)
+{
+        struct meta *meta;
+        struct page *page;
+
+        page = alloc_page(GFP_KERNEL);
+        if(page == NULL) {
+                return -1;
+        }
+
+        meta = init_meta(bio);
+        if (meta == NULL) {
+                goto err;
+        }
+        memcpy(page_address(page), meta, sizeof(struct meta));
+        if (bio_add_page(bio, page, sizeof(struct meta), 0) == 0) {
+                goto err;
+        }
+
+        return 0;
+
+err:
+        __free_page(page);
+        return -1;
+}
+
+sector_t srl_tail(struct srl *srl)
+{
+        return srl->tail;
+}
+
+void srl_tail_inc(struct srl *srl)
+{
+        srl->tail += (META_SIZE + PAGE_SIZE) >> BLK_SHIFT;
 }
