@@ -533,6 +533,11 @@ sector_t srl_tail(struct srl *srl)
         return srl->tail;
 }
 
+sector_t srl_head(struct srl *srl)
+{
+        return srl->head;
+}
+
 void srl_tail_inc(struct srl *srl)
 {
         srl->tail += (META_SIZE + PAGE_SIZE) >> BLK_SHIFT;
@@ -547,4 +552,33 @@ void bio_free_page(struct bio *bio)
                 __free_page(bvec->bv_page);
         }
 }
+
+struct bio *bio_alloc_with_pages(gfp_t gfp_mask, int pages)
+{
+        struct bio *bio;
+
+        bio = bio_alloc(gfp_mask, pages);
+        if (bio == NULL) {
+                return NULL;
+        }
+
+        while (pages--) {
+                page = page_alloc(gfp_mask);
+                if (pages == NULL) {
+                        goto fail;
+                }
+
+                if (bio_add_page(bio, page, PAGE_SIZE, 0) != PAGE_SIZE) {
+                        __free_page(page);
+                        goto fail;
+                }
+        }
+
+fail:
+        bio_free_page(bio);
+        bio_put(bio);
+        return NULL;
+}
+
+
 
