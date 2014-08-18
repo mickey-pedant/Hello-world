@@ -5,8 +5,10 @@
 #include <linux/kthread.h>
 #include <linux/bio.h>
 #include "miniblk.h"
+
 #include "bio_helper.h"
 #include "syncer.h"
+#include "buffer.h"
 
 struct minidev *minidev;
 static struct bio_wrapper_list *bio_wrapper_list;
@@ -182,11 +184,13 @@ err_queue:
 	return ret;
 }
 
+/* FIXME free mem */
 static int __init minidev_init(void)
 {
 	int ret = 0;
         struct task_struct *task;
         struct srl *srl = NULL;
+	struct data_buffer *buffer;
 
         bio_wrapper_list = init_bio_wrapper_list(MAX_BIO_WRAPPER_LIST_SIZE);
         if (bio_wrapper_list == NULL) {
@@ -197,6 +201,11 @@ static int __init minidev_init(void)
         if (srl == NULL) {
                 return -ENOMEM;
         }
+
+	buffer = init_data_buffer(MAX_BUFFER_SIZE);
+	if (buffer == NULL) {
+		return -1;
+	}
 
 	minidev = kzalloc(sizeof(struct minidev), GFP_KERNEL);
 	if(!minidev) {
@@ -210,6 +219,7 @@ static int __init minidev_init(void)
 	if(ret) {
 		goto fail;
 	}
+	minidev->buffer = buffer;
 
 	add_disk(minidev->disk);
 	printk(KERN_INFO "miniblk init!\n");
@@ -253,6 +263,7 @@ static void __exit minidev_exit(void)
 	unregister_blkdev(minidev->major, MINIDEV_NAME);
 
 	kfree(minidev);
+	free_data_buffer(minidev->buffer);
 
 	printk(KERN_INFO "miniblk exit!\n");
 }

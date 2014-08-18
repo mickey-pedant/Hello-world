@@ -26,11 +26,11 @@ void free_srl_data(struct srl_data *srl_data)
 	kfree(srl_data);
 }
 
-struct buffer *init_buffer(uint64_t maxsize)
+struct data_buffer *init_data_buffer(uint64_t maxsize)
 {
-	struct buffer *buffer;
+	struct data_buffer *buffer;
 
-	buffer = kmalloc(sizeof(struct buffer), GFP_KERNEL);
+	buffer = kmalloc(sizeof(struct data_buffer), GFP_KERNEL);
 	if (buffer == NULL) {
 		return NULL;
 	}
@@ -44,7 +44,7 @@ struct buffer *init_buffer(uint64_t maxsize)
 	return buffer;
 }
 
-void free_buffer(struct buffer *buffer)
+void free_data_buffer(struct data_buffer *buffer)
 {
 	struct srl_data *srl_data;
 	struct srl_data *tmp_data;
@@ -60,7 +60,7 @@ void free_buffer(struct buffer *buffer)
 	kfree(buffer);
 }
 
-int buffer_is_full(struct buffer *buffer)
+int buffer_is_full(struct data_buffer *buffer)
 {
 	int ret;
 
@@ -71,7 +71,7 @@ int buffer_is_full(struct buffer *buffer)
 	return ret;
 }
 
-struct srl_data *get_find_data(struct buffer *buffer, sector_t disk_sector)
+struct srl_data *get_find_data(struct data_buffer *buffer, sector_t disk_sector)
 {
 	struct srl_data *data_iter;
 	struct srl_data *srl_data = NULL;
@@ -91,7 +91,7 @@ struct srl_data *get_find_data(struct buffer *buffer, sector_t disk_sector)
 	return srl_data;
 }
 
-static void __buffer_trunc(struct buffer *buffer)
+static void __buffer_trunc(struct data_buffer *buffer)
 {
 	struct srl_data *head_data;
 	struct srl_data *data_iter;
@@ -111,7 +111,7 @@ static void __buffer_trunc(struct buffer *buffer)
 	spin_unlock(&buffer->lock);
 }
 
-int buffer_data_add(struct buffer *buffer, struct srl_data *srl_data)
+int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 {
 	if (buffer_is_full(buffer)) {
 		__buffer_trunc(buffer);

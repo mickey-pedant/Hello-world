@@ -7,6 +7,9 @@
 #define MINIDEV_NAME		"minibd"
 #define MINIDEV_BDEV		"/dev/sdb"
 #define SRLDEV_BDEV             "/dev/sda"
+#define MAX_BUFFER_SIZE (1 << 14)
+struct buffer;
+
 struct srl {
         atomic64_t head;
         atomic64_t tail;
@@ -22,6 +25,7 @@ struct minidev {
 	dev_t major;
 	struct block_device *bdev;
         struct srl *srl;
+	struct data_buffer *buffer;
 };
 
 #endif // __HABD_H__
