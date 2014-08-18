@@ -6,6 +6,7 @@
 #include <linux/bio.h>
 #include "miniblk.h"
 #include "bio_helper.h"
+#include "syncer.h"
 
 struct minidev *minidev;
 static struct bio_wrapper_list *bio_wrapper_list;
@@ -114,8 +115,8 @@ static struct srl *init_srl(const char *disk)
                 goto err_bdev;
         }
         srl->bdev = bdev;
-        srl->tail = 0;
-        srl->head = 0;
+        atomic64_set(&srl->tail, 0);
+        atomic64_set(&srl->head, 0);
 
         return srl;
 err_bdev:
@@ -215,11 +216,17 @@ static int __init minidev_init(void)
         pr_info("disk bdev:%p, srl bdev: %p.\n",
                         minidev->bdev, minidev->srl->bdev);
 
-        task = kthread_run(wrapper_run, NULL, "wrapper_worker");
+        task = kthread_run(wrapper_run, NULL, "wrapper");
         if (task == NULL || IS_ERR(task)) {
                 goto fail;
         }
         minidev->task = task;
+
+	task = kthread_run(syncer_run, NULL, "syncer");
+        if (task == NULL || IS_ERR(task)) {
+                goto fail;
+        }
+        minidev->syncer = task;
 
 	return 0;
 
@@ -231,6 +238,11 @@ fail:
 
 static void __exit minidev_exit(void)
 {
+        complete(&bio_wrapper_list->complete);
+        kthread_stop(minidev->task);
+        kthread_stop(minidev->syncer);
+
+	msleep(1000);
 	del_gendisk(minidev->disk);
 	put_disk(minidev->disk);
 
@@ -241,9 +253,6 @@ static void __exit minidev_exit(void)
 	unregister_blkdev(minidev->major, MINIDEV_NAME);
 
 	kfree(minidev);
-
-        complete(&bio_wrapper_list->complete);
-        kthread_stop(minidev->task);
 
 	printk(KERN_INFO "miniblk exit!\n");
 }

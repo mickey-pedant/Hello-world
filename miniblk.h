@@ -8,14 +8,15 @@
 #define MINIDEV_BDEV		"/dev/sdb"
 #define SRLDEV_BDEV             "/dev/sda"
 struct srl {
-        sector_t head;
-        sector_t tail;
+        atomic64_t head;
+        atomic64_t tail;
         spinlock_t lock;
         struct block_device *bdev;
 };
 
 struct minidev {
         struct task_struct *task;
+	struct task_struct *syncer;
 	struct gendisk *disk;
 	struct request_queue *rq;
 	dev_t major;

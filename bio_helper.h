@@ -79,8 +79,10 @@ void free_bio_struct(struct bio_struct *bio_struct);
 
 int bio_add_meta_page(struct bio *bio);
 sector_t srl_tail(struct srl *srl);
+sector_t srl_head(struct srl *srl);
 void srl_tail_inc(struct srl *srl);
-void bio_free_page(struct bio *bio);
+void srl_head_inc(struct srl *srl);
+void bio_free_pages(struct bio *bio);
 
-struct bio *bio_alloc_with_pages(gfp_t gfp_mask, int pages);
+int bio_add_srl_data(struct bio *bio, int pages);
 #endif // __BIO_HELPER_H__
