@@ -18,7 +18,6 @@ void hadm_bio_end_io(struct bio *bio, int err)
 {
 	void *src;
 	struct bio_wrapper *bio_w;
-	struct bio_struct *iter;
 	struct srl_data *srl_data;
 	struct page *page;
 	struct bio_struct *bio_struct;
@@ -34,7 +33,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		bio_w->err |= err;
 	} else if(bio_data_dir(bio_w->bio) == READ) {
 		pr_info("copy bio data\n");
-		pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
+		//pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
 		//memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
 		src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
 		if (src == NULL) {
@@ -228,7 +227,6 @@ void submit_bio_list(struct list_head *bio_list)
 	struct bio_struct *bio_struct;
 	struct srl_data *buffer_data;
 	void *src_addr;
-	void *dst_addr;
 
 	/* FIXME buffer full? at least one bio in the list */
 	list_for_each_entry(bio_struct, bio_list, list) {

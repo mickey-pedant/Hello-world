@@ -5,7 +5,7 @@
 #include <net/sock.h>
 
 #define MINIDEV_NAME		"minibd"
-#define MINIDEV_BDEV		"/dev/sda"
+#define MINIDEV_BDEV		"/dev/sdc"
 #define SRLDEV_BDEV             "/dev/sdb"
 #define MAX_BUFFER_SIZE (1 << 14)
 struct buffer;
