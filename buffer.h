@@ -23,8 +23,10 @@ struct data_buffer {
 	/* inuse_list -> local_head data */
 	struct list_head inuse_list;
 	spinlock_t lock;
+	struct completion compl;
 	uint64_t maxsize;
-	uint64_t size;
+	uint64_t data_size;
+	uint64_t inuse_size;
 };
 
 struct data_buffer *init_data_buffer(uint64_t maxsize);

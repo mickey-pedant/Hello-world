@@ -7,7 +7,7 @@
 #define MINIDEV_NAME		"minibd"
 #define MINIDEV_BDEV		"/dev/sdc"
 #define SRLDEV_BDEV             "/dev/sdb"
-#define MAX_BUFFER_SIZE (1 << 14)
+#define MAX_BUFFER_SIZE (1 << 0)
 struct buffer;
 
 struct srl {

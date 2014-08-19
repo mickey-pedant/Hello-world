@@ -260,6 +260,11 @@ void submit_bio_list(struct list_head *bio_list)
 				pr_info("not find the data.");
 			}
 
+		} else {
+			if (buffer_is_full(minidev->buffer)) {
+				pr_info("list is full, wait for sync...--------------------------\n");
+				wait_for_completion(&minidev->buffer->compl);
+			}
 		}
 		//dump_bio(bio, __FUNCTION__);
 		submit_bio(bio->bi_rw, bio);
