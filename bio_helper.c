@@ -19,9 +19,12 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	void *src;
 	struct bio_wrapper *bio_w;
 	struct bio_struct *iter;
-	struct bio_struct *bio_struct = NULL;
+	struct srl_data *srl_data;
+	struct page *page;
+	struct bio_struct *bio_struct;
 
-	bio_w = bio->bi_private;
+	bio_struct = (struct bio_struct *)bio->bi_private;
+	bio_w = bio_struct->wrapper;
 
 	pr_info("handler bio READ begin");
 
@@ -30,32 +33,28 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	if (err) {
 		bio_w->err |= err;
 	} else if(bio_data_dir(bio_w->bio) == READ) {
-		list_for_each_entry(iter, &bio_w->bio_list, list) {
-			if (iter->bio == bio) {
-				bio_struct = iter;
-			}
+		pr_info("copy bio data\n");
+		pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
+		//memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
+		src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
+		if (src == NULL) {
+			pr_info("BUG!!!!!!!!!! src is NULL.");
+		} else {
+			memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
+					page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+		}
+		//memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
+	} else {
+		page = bio->bi_io_vec[1].bv_page;
+		get_page(page);
+		srl_data = (struct srl_data *)bio_struct->private;
+		srl_data->data_page = page;
+
+		/* guarantee in submit phase */
+		if (buffer_data_add(minidev->buffer, srl_data) < 0) {
+			BUG();
 		}
 
-		//memset(page_address(bvec->bv_page), 'C', PAGE_SIZE);
-		/**
-		 * TODO check sector
-		 */
-		if (bio_struct == NULL) {
-			pr_info("bug, can't find origin bio_struct.\n");
-		} else {
-			pr_info("copy bio data\n");
-			pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
-			//memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
-			src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
-			if (src == NULL) {
-				pr_info("BUG!!!!!!!!!! src is NULL.");
-			} else {
-				memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
-						page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
-			}
-			//memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
-		}
-	} else {
 		srl_tail_inc(minidev->srl);
 	}
 
@@ -83,6 +82,7 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 {
 	struct list_head *bio_list = &wrapper->bio_list;
 	//struct bio_list *bio_list;
+	struct srl_data *srl_data = NULL;
 	struct bio_struct *bio_struct;
 	struct bio *bio;
 	struct bio *bio_src;
@@ -109,7 +109,6 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 		bio->bi_bdev = bio_src->bi_bdev;
 		bio->bi_flags = bio_src->bi_flags;
 		bio->bi_rw = bio_src->bi_rw;
-		bio->bi_private = wrapper;
 		bio->bi_end_io = bi_end_io;
 		bio->bi_sector = bio_src->bi_sector + 8 * i;
 
@@ -117,6 +116,16 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 			if (bio_add_meta_page(bio) != 0) {
 				pr_info("add meta failed.\n");
 				bio_put(bio);
+				goto err_bio;
+			}
+
+			/*
+			 * add a srl_data struct for write bio. at this time, the
+			 * data's page is NULL, will add in endio
+			 */
+			srl_data = init_srl_data(bio->bi_sector,
+					srl_tail(minidev->srl), NULL);
+			if (srl_data == NULL) {
 				goto err_bio;
 			}
 
@@ -146,12 +155,13 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 		}
 
 		//dump_bio(bio, __FUNCTION__);
-		bio_struct = init_bio_struct(bio, i);
+		bio_struct = init_bio_struct(bio, wrapper, srl_data, i);
 		if (bio_struct == NULL) {
 			bio_free_pages(bio);
 			bio_put(bio);
 			goto err_bio;
 		}
+		bio->bi_private = bio_struct;
 
 		list_add_tail(&bio_struct->list, &wrapper->bio_list);
 		//pr_info("---------------split bio end-------");
@@ -220,7 +230,7 @@ void submit_bio_list(struct list_head *bio_list)
 	void *src_addr;
 	void *dst_addr;
 
-	/* at least one bio in the list */
+	/* FIXME buffer full? at least one bio in the list */
 	list_for_each_entry(bio_struct, bio_list, list) {
 		//pr_info("===== submit bio =====");
 
@@ -420,7 +430,8 @@ void __dump_bio_wrapper(struct bio *bio)
 	   */
 }
 
-struct bio_struct *init_bio_struct(struct bio* bio, int idx)
+struct bio_struct *init_bio_struct(struct bio* bio, struct bio_wrapper *wrapper,
+		struct srl_data *srl_data, int idx)
 {
 	struct bio_struct *bio_struct;
 
@@ -434,6 +445,8 @@ struct bio_struct *init_bio_struct(struct bio* bio, int idx)
 	bio_struct->bio = bio;
 	bio_struct->idx = idx;
 	bio_struct->sector = bio->bi_sector;
+	bio_struct->wrapper = wrapper;
+	bio_struct->private = srl_data;
 
 	return bio_struct;
 }

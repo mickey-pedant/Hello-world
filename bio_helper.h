@@ -13,6 +13,9 @@ struct bio_struct {
         int idx;
 
         struct list_head list;
+
+	struct bio_wrapper *wrapper;
+	void *private;
 };
 
 struct meta {
@@ -74,7 +77,8 @@ void dump_bio(struct bio *bio, const char *msg);
 void dump_wrapper_list(struct bio_wrapper_list *wrapper_list, const char *msg);
 void dump_bio_wrapper(struct bio_wrapper *bio_wrapper);
 
-struct bio_struct *init_bio_struct(struct bio* bio, int idx);
+struct srl_data;
+struct bio_struct *init_bio_struct(struct bio* bio, struct bio_wrapper *wrapper, struct srl_data *srl_data, int idx);
 void free_bio_struct(struct bio_struct *bio_struct);
 
 int bio_add_meta_page(struct bio *bio);
