@@ -262,8 +262,9 @@ static void __exit minidev_exit(void)
 
 	unregister_blkdev(minidev->major, MINIDEV_NAME);
 
-	kfree(minidev);
+	msleep(2000);
 	free_data_buffer(minidev->buffer);
+	kfree(minidev);
 
 	printk(KERN_INFO "miniblk exit!\n");
 }

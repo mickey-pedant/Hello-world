@@ -24,7 +24,12 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	bio_w = bio->bi_private;
 
 	pr_info("handler bio READ begin");
-	if(bio_data_dir(bio_w->bio) == READ) {
+
+	pr_info("handler bio READ end");
+
+	if (err) {
+		bio_w->err |= err;
+	} else if(bio_data_dir(bio_w->bio) == READ) {
 		list_for_each_entry(iter, &bio_w->bio_list, list) {
 			if (iter->bio == bio) {
 				bio_struct = iter;
@@ -51,11 +56,9 @@ void hadm_bio_end_io(struct bio *bio, int err)
 			//memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
 		}
 	} else {
+		srl_tail_inc(minidev->srl);
 	}
-	pr_info("handler bio READ end");
 
-	if (err)
-		bio_w->err |= err;
 	if (atomic_dec_and_test(&bio_w->count)) {
 		pr_info("----------------------------XXbio wrapper endio.");
 		bio_endio(bio_w->bio, bio_w->err);
@@ -119,7 +122,6 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 
 			bio->bi_bdev = minidev->srl->bdev;
 			bio->bi_sector = srl_tail(minidev->srl);
-			srl_tail_inc(minidev->srl);
 			pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
 		} else {
 			bio->bi_bdev = minidev->bdev;
@@ -225,19 +227,20 @@ void submit_bio_list(struct list_head *bio_list)
 		bio = bio_struct->bio;
 		//pr_info("submit list bio: %p\n", bio);
 		dump_bio(bio, __FUNCTION__);
-//		if (bio_data_dir(bio) == WRITE) {
-//			pr_content(page_address(bio->bi_io_vec[0].bv_page), 512);
-//			pr_c_content(page_address(bio->bi_io_vec[1].bv_page), 512);
-//		}
+		//		if (bio_data_dir(bio) == WRITE) {
+		//			pr_content(page_address(bio->bi_io_vec[0].bv_page), 512);
+		//			pr_c_content(page_address(bio->bi_io_vec[1].bv_page), 512);
+		//		}
 		schedule();             /* FIXME XXOOXX */
 		//msleep(10);
 
 		if (bio_data_dir(bio) == READ) {
 			buffer_data = get_find_data(minidev->buffer, bio->bi_sector);
 			if (buffer_data != NULL) {
+				pr_info("find data in buffer.!!!!!!\n");
 				src_addr = page_address(buffer_data->data_page);
-				pr_c_content(src_addr, 512);
-				//dst_addr = page_address(bio->bi_io_vec[0].bv_page);
+//				pr_c_content(src_addr, 512);
+//				//dst_addr = page_address(bio->bi_io_vec[0].bv_page);
 //				memcpy(dst_addr, src_addr, PAGE_SIZE);
 //
 //				if (atomic_dec_and_test(&bio_wrapper->count)) {

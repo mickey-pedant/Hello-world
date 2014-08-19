@@ -13,6 +13,7 @@ struct srl_data *init_srl_data(sector_t srl_sector, sector_t disk_sector,
 	}
 
 	INIT_LIST_HEAD(&srl_data->list);
+	INIT_LIST_HEAD(&srl_data->list_inuse);
 	srl_data->srl_sector = srl_sector;
 	srl_data->disk_sector = disk_sector;
 	srl_data->data_page = data_page;
@@ -35,7 +36,7 @@ struct data_buffer *init_data_buffer(uint64_t maxsize)
 		return NULL;
 	}
 
-	INIT_LIST_HEAD(&buffer->head);
+	INIT_LIST_HEAD(&buffer->inuse_list);
 	INIT_LIST_HEAD(&buffer->data_list);
 	spin_lock_init(&buffer->lock);
 	buffer->size = 0;
@@ -78,14 +79,14 @@ struct srl_data *get_find_data(struct data_buffer *buffer, sector_t disk_sector)
 
 	spin_lock(&buffer->lock);
 	/* manual construct the search list */
-	buffer->data_list.prev->next = &buffer->head;
-	list_for_each_entry(data_iter, &buffer->head, list) {
+	//buffer->data_list.prev->next = &buffer->head;
+	list_for_each_entry_reverse(data_iter, &buffer->inuse_list, list_inuse) {
 		if (data_iter->disk_sector == disk_sector) {
 			srl_data = data_iter;
 			break;
 		}
 	}
-	buffer->head.prev->next = &buffer->data_list;
+	//buffer->head.prev->next = &buffer->data_list;
 	spin_unlock(&buffer->lock);
 
 	return srl_data;
@@ -98,7 +99,7 @@ static void __buffer_trunc(struct data_buffer *buffer)
 	struct srl_data *tmp_data;
 
 	spin_lock(&buffer->lock);
-	head_data = list_entry(&buffer->head, struct srl_data, list);
+	head_data = list_first_entry(&buffer->inuse_list, struct srl_data, list_inuse);
 	list_for_each_entry_safe(data_iter, tmp_data, &buffer->data_list,
 			list) {
 		if (data_iter == head_data) {
@@ -123,8 +124,17 @@ int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 
 	spin_lock(&buffer->lock);
 	list_add_tail(&buffer->data_list, &srl_data->list);
+	list_add_tail(&buffer->inuse_list, &srl_data->list_inuse);
 	buffer->size++;
 	spin_unlock(&buffer->lock);
 
 	return 0;
+}
+
+void buffer_inuse_del(struct data_buffer *buffer)
+{
+	spin_lock(&buffer->lock);
+	list_del(buffer->inuse_list.next);
+	spin_unlock(&buffer->lock);
+
 }
