@@ -2,6 +2,28 @@
 
 #include "buffer.h"
 
+void dump_buffer_inuse(struct data_buffer *buffer)
+{
+	struct srl_data *srl_data;
+
+	pr_info("dump inuse buffer:\n");
+	list_for_each_entry(srl_data, &buffer->inuse_list, list_inuse) {
+		pr_info("-> %lu ", srl_data->disk_sector);
+	}
+	pr_info("\n");
+}
+
+void dump_buffer_data(struct data_buffer *buffer)
+{
+	struct srl_data *srl_data;
+
+	pr_info("dump data buffer:\n");
+	list_for_each_entry(srl_data, &buffer->data_list, list) {
+		pr_info("-> %lu ", srl_data->disk_sector);
+	}
+	pr_info("\n");
+}
+
 struct srl_data *init_srl_data(sector_t srl_sector, sector_t disk_sector,
 		struct page *data_page)
 {
@@ -77,7 +99,9 @@ struct srl_data *get_find_data(struct data_buffer *buffer, sector_t disk_sector)
 	struct srl_data *data_iter;
 	struct srl_data *srl_data = NULL;
 
+	pr_info("begin search for the buffer.search sector:%lu\n", disk_sector);
 	spin_lock(&buffer->lock);
+	dump_buffer_inuse(buffer);
 	/* manual construct the search list */
 	//buffer->data_list.prev->next = &buffer->head;
 	list_for_each_entry_reverse(data_iter, &buffer->inuse_list, list_inuse) {
@@ -115,6 +139,7 @@ static void __buffer_trunc(struct data_buffer *buffer)
 int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 {
 	if (buffer_is_full(buffer)) {
+		pr_info("buffer is full\n");
 		__buffer_trunc(buffer);
 	}
 
@@ -123,8 +148,11 @@ int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 	}
 
 	spin_lock(&buffer->lock);
-	list_add_tail(&buffer->data_list, &srl_data->list);
-	list_add_tail(&buffer->inuse_list, &srl_data->list_inuse);
+	list_add_tail(&srl_data->list, &buffer->data_list);
+	list_add_tail(&srl_data->list_inuse, &buffer->inuse_list);
+	pr_info("bufer add sector:%lu.\n", srl_data->disk_sector);
+	//dump_buffer_data(buffer);
+	//dump_buffer_inuse(buffer);
 	buffer->size++;
 	spin_unlock(&buffer->lock);
 
@@ -134,7 +162,10 @@ int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 void buffer_inuse_del(struct data_buffer *buffer)
 {
 	spin_lock(&buffer->lock);
-	list_del(buffer->inuse_list.next);
+	//dump_buffer_inuse(buffer);
+	if (!list_empty(&buffer->inuse_list))
+		list_del(buffer->inuse_list.next);
+	//dump_buffer_inuse(buffer);
 	spin_unlock(&buffer->lock);
 
 }

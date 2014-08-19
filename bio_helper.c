@@ -55,7 +55,6 @@ void hadm_bio_end_io(struct bio *bio, int err)
 			BUG();
 		}
 
-		srl_tail_inc(minidev->srl);
 	}
 
 	if (atomic_dec_and_test(&bio_w->count)) {
@@ -123,14 +122,15 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 			 * add a srl_data struct for write bio. at this time, the
 			 * data's page is NULL, will add in endio
 			 */
-			srl_data = init_srl_data(bio->bi_sector,
-					srl_tail(minidev->srl), NULL);
+			srl_data = init_srl_data(srl_tail(minidev->srl),
+					bio->bi_sector, NULL);
 			if (srl_data == NULL) {
 				goto err_bio;
 			}
 
 			bio->bi_bdev = minidev->srl->bdev;
 			bio->bi_sector = srl_tail(minidev->srl);
+			srl_tail_inc(minidev->srl);
 			pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
 		} else {
 			bio->bi_bdev = minidev->bdev;
@@ -258,6 +258,8 @@ void submit_bio_list(struct list_head *bio_list)
 //				}
 //				bio = bio->bi_next;
 //				continue;
+			} else {
+				pr_info("not find the data.");
 			}
 
 		}

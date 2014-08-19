@@ -1,6 +1,8 @@
 #include "syncer.h"
 #include <linux/kthread.h>
 
+#include "buffer.h"
+
 extern struct minidev *minidev;
 
 void sync_read_endio(struct bio *bio, int err)
@@ -17,6 +19,8 @@ void sync_write_endio(struct bio *bio, int err)
 {
 	if (err == 0) {
 		srl_head_inc(minidev->srl);
+		/* means for each srl_data, submit only once in sequence */
+		buffer_inuse_del(minidev->buffer);
 	}
 	pr_info("write data to disk finish head:%lu.\n",
 			srl_head(minidev->srl));
@@ -48,7 +52,7 @@ int sync_sector(struct srl *srl, sector_t start)
 	wait_for_completion(&compl);    /* handle bio err? */
 
 	meta = (struct meta *)page_address(rbio->bi_io_vec[0].bv_page);
-	//pr_content(meta, 8192);
+	//pr_content(page_address(rbio->bi_io_vec[1].bv_page), 512);
 
 	wbio = bio_alloc(GFP_KERNEL, 1);
 	if (wbio == NULL) {
@@ -88,8 +92,8 @@ int syncer_run(void *arg)
 
 	pr_info("syncer_run...\n");
 
+	start = srl_head(minidev->srl);
 	while(!kthread_should_stop()) {
-		start = srl_head(minidev->srl);
 		tail = srl_tail(minidev->srl);
 		pr_info("ready syncer %lu - %lu.\n",
 				start, tail);
