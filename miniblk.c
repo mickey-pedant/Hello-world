@@ -118,6 +118,7 @@ static struct srl *init_srl(const char *disk)
         }
         srl->bdev = bdev;
 	spin_lock_init(&srl->lock);
+	sema_init(&srl->sema, 0);
         atomic64_set(&srl->tail, 0);
         atomic64_set(&srl->disk_tail, 0);
         atomic64_set(&srl->head, 0);

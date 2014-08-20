@@ -569,6 +569,7 @@ void srl_tail_inc(struct srl *srl)
 void srl_disk_tail_inc(struct srl *srl)
 {
 	atomic64_add(9, &srl->disk_tail);
+	up(&srl->sema);
 }
 
 void srl_head_inc(struct srl *srl)

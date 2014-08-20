@@ -96,17 +96,13 @@ int syncer_run(void *arg)
 
 	start = srl_head(minidev->srl);
 	while(!kthread_should_stop()) {
-		tail = srl_disk_tail(minidev->srl);
-		pr_info("ready syncer %lu - %lu.\n",
-				start, tail);
-
-		while(start < tail) {
-			sync_sector(minidev->srl, start);
-			start += (PAGE_SIZE + META_SIZE) >> BLK_SHIFT;
+		if (down_timeout(&minidev->srl->sema,
+					msecs_to_jiffies(1000))) {
+			continue;
 		}
+		sync_sector(minidev->srl, start);
+		start += (PAGE_SIZE + META_SIZE) >> BLK_SHIFT;
 
-		//schedule();
-		msleep(10);
 	}
 
 	msleep(2000);		/* just wait for io completion */
