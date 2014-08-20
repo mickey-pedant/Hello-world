@@ -132,6 +132,11 @@ static void __buffer_trunc(struct data_buffer *buffer)
 	struct srl_data *data_iter;
 	struct srl_data *tmp_data;
 
+	pr_info("before trunc:\n");
+	pr_info("inuse_size:%llu|data_size:%llu.\n",
+			buffer->inuse_size, buffer->data_size);
+	dump_buffer_data(buffer);
+	dump_buffer_inuse(buffer);
 	head_data = list_first_entry(&buffer->inuse_list, struct srl_data, list_inuse);
 	list_for_each_entry_safe(data_iter, tmp_data, &buffer->data_list,
 			list) {
@@ -142,6 +147,11 @@ static void __buffer_trunc(struct data_buffer *buffer)
 		list_del(&data_iter->list);
 		free_srl_data(data_iter);
 	}
+	pr_info("after trunc:\n");
+	pr_info("inuse_size:%llu|data_size:%llu.\n",
+			buffer->inuse_size, buffer->data_size);
+	dump_buffer_data(buffer);
+	dump_buffer_inuse(buffer);
 }
 
 static int __buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
@@ -186,15 +196,23 @@ void buffer_inuse_pre_occu(struct data_buffer *buffer)
 try_occupy:
 	spin_lock(&buffer->lock);
 
+	/* (inuse_size && data_size == max ? data_size : data_size++;
+	 * or data_size
+	 */
 	if (buffer->inuse_size == buffer->maxsize) {
 		spin_unlock(&buffer->lock);
+		pr_info("occu try wait.\n");
 		wait_for_completion(&buffer->compl);
+		pr_info("occu wait finish.\n");
 		goto try_occupy;
 	}
 
+	if (buffer->data_size == buffer->maxsize) {
+		__buffer_trunc(buffer);
+	}
 	buffer->inuse_size++;
 	buffer->data_size++;
-	pr_info("pre occu:inuse_size:%lu|data_size:%lu.\n",
+	pr_info("pre occu:inuse_size:%llu|data_size:%llu.\n",
 			buffer->inuse_size,
 			buffer->data_size);
 	spin_unlock(&buffer->lock);
@@ -208,6 +226,9 @@ void buffer_inuse_del_occd(struct data_buffer *buffer)
 	if (buffer->inuse_size == buffer->maxsize - 1) {
 		complete(&buffer->compl);
 	}
+	pr_info("del occu:inuse_size:%llu|data_size:%llu.\n",
+			buffer->inuse_size,
+			buffer->data_size);
 	spin_unlock(&buffer->lock);
 }
 
@@ -223,6 +244,9 @@ void buffer_data_add_occd(struct data_buffer *buffer, struct srl_data *srl_data)
 	if (__buffer_data_add(buffer, srl_data) < 0)
 		BUG();
 
+	pr_info("add occu:inuse_size:%llu|data_size:%llu.\n",
+			buffer->inuse_size,
+			buffer->data_size);
 	spin_unlock(&buffer->lock);
 }
 
@@ -233,9 +257,17 @@ void buffer_inuse_del(struct data_buffer *buffer)
 	if (!list_empty(&buffer->inuse_list)) {
 		list_del(buffer->inuse_list.next);
 		buffer->inuse_size--;
-		if (buffer->inuse_size == buffer->maxsize - 1) {
-			complete(&buffer->compl);
-		}
+
+	} else {
+		pr_info("BUG!!!!!!!!!!!!!!!!!!!!!!!try del empty inuse buffer.\n");
+		dump_buffer_inuse(buffer);
+		dump_buffer_data(buffer);
 	}
+	if (buffer->inuse_size == buffer->maxsize - 1) {
+		complete(&buffer->compl);
+	}
+	pr_info("inuse del:inuse_size:%llu|data_size:%llu.\n",
+			buffer->inuse_size,
+			buffer->data_size);
 	spin_unlock(&buffer->lock);
 }

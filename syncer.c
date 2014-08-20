@@ -17,13 +17,15 @@ void sync_read_endio(struct bio *bio, int err)
 
 void sync_write_endio(struct bio *bio, int err)
 {
+	static unsigned long count = 0;
+
 	if (err == 0) {
 		srl_head_inc(minidev->srl);
 		/* means for each srl_data, submit only once in sequence */
 		buffer_inuse_del(minidev->buffer);
 	}
-	pr_info("write data to disk finish head:%lu.\n",
-			srl_head(minidev->srl));
+	pr_info("write data to disk %lu times, finish head:%lu.\n",
+			++count, srl_head(minidev->srl));
 }
 
 int sync_sector(struct srl *srl, sector_t start)

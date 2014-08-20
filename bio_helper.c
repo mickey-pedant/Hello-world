@@ -21,6 +21,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	struct srl_data *srl_data;
 	struct page *page;
 	struct bio_struct *bio_struct;
+	static unsigned long count = 0;
 
 	bio_struct = (struct bio_struct *)bio->bi_private;
 	bio_w = bio_struct->wrapper;
@@ -50,7 +51,10 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		srl_data = (struct srl_data *)bio_struct->private;
 		srl_data->data_page = page;
 
+		srl_tail_inc(minidev->srl);
+
 		/* guarantee in submit phase */
+		pr_info("add buffer %lu times.\n", ++count);
 		buffer_data_add_occd(minidev->buffer, srl_data);
 	}
 
@@ -127,7 +131,7 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 
 			bio->bi_bdev = minidev->srl->bdev;
 			bio->bi_sector = srl_tail(minidev->srl);
-			srl_tail_inc(minidev->srl);
+			/* srl tail increase in the endio! sync model*/
 			pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
 		} else {
 			bio->bi_bdev = minidev->bdev;
@@ -225,6 +229,7 @@ void submit_bio_list(struct list_head *bio_list)
 	struct bio_struct *bio_struct;
 	struct srl_data *buffer_data;
 	void *src_addr;
+	//static unsigned long count = 0;
 
 	/* FIXME buffer full? at least one bio in the list */
 	list_for_each_entry(bio_struct, bio_list, list) {
@@ -259,6 +264,7 @@ void submit_bio_list(struct list_head *bio_list)
 			}
 
 		} else {
+			//pr_info("submit write bio %lu times.\n", ++count);
 			buffer_inuse_pre_occu(minidev->buffer);
 		}
 
