@@ -51,7 +51,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		srl_data = (struct srl_data *)bio_struct->private;
 		srl_data->data_page = page;
 
-		srl_tail_inc(minidev->srl);
+		srl_disk_tail_inc(minidev->srl);
 
 		/* guarantee in submit phase */
 		pr_info("add buffer %lu times.\n", ++count);
@@ -132,6 +132,7 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 			bio->bi_bdev = minidev->srl->bdev;
 			bio->bi_sector = srl_tail(minidev->srl);
 			/* srl tail increase in the endio! sync model*/
+			srl_tail_inc(minidev->srl);
 			pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
 		} else {
 			bio->bi_bdev = minidev->bdev;
@@ -550,6 +551,11 @@ sector_t srl_tail(struct srl *srl)
 	return atomic64_read(&srl->tail);
 }
 
+sector_t srl_disk_tail(struct srl *srl)
+{
+	return atomic64_read(&srl->disk_tail);
+}
+
 sector_t srl_head(struct srl *srl)
 {
 	return atomic64_read(&srl->head);
@@ -558,6 +564,11 @@ sector_t srl_head(struct srl *srl)
 void srl_tail_inc(struct srl *srl)
 {
 	atomic64_add(9, &srl->tail);
+}
+
+void srl_disk_tail_inc(struct srl *srl)
+{
+	atomic64_add(9, &srl->disk_tail);
 }
 
 void srl_head_inc(struct srl *srl)

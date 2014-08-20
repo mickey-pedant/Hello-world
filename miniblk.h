@@ -13,6 +13,7 @@ struct buffer;
 struct srl {
         atomic64_t head;
         atomic64_t tail;
+	atomic64_t disk_tail;
         spinlock_t lock;
         struct block_device *bdev;
 };
