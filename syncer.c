@@ -1,7 +1,8 @@
-#include "syncer.h"
 #include <linux/kthread.h>
 
+#include "syncer.h"
 #include "buffer.h"
+#include "srl.h"
 
 extern struct minidev *minidev;
 
@@ -90,7 +91,7 @@ err_rbio:
 
 int syncer_run(void *arg)
 {
-	sector_t start, tail;
+	sector_t start;
 
 	pr_info("syncer_run...\n");
 

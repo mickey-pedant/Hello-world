@@ -20,10 +20,9 @@ void free_srl_data(struct srl_data *srl_data);
 
 struct data_buffer {
 	struct list_head data_list;
-	/* inuse_list -> local_head data */
 	struct list_head inuse_list;
 	spinlock_t lock;
-	struct completion compl;
+	struct completion compl;	/* for buffer is full */
 	uint64_t maxsize;
 	uint64_t data_size;
 	uint64_t inuse_size;

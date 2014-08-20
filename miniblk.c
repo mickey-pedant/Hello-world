@@ -9,6 +9,7 @@
 #include "bio_helper.h"
 #include "syncer.h"
 #include "buffer.h"
+#include "srl.h"
 
 struct minidev *minidev;
 static struct bio_wrapper_list *bio_wrapper_list;
@@ -45,33 +46,23 @@ int wrapper_run(void *data)
 
         while(!kthread_should_stop()) {
                 while ((bio_wrapper = bio_wrapper_list_get(bio_wrapper_list)) == NULL) {
-                        pr_info("wait begin:------------\n");
                         wait_for_completion(&bio_wrapper_list->complete);
-                        pr_info("wait end:------------\n");
                         if (kthread_should_stop()) {
                                 return 0;
                         }
                 }
 
-                // dump_wrapper_list(bio_wrapper_list, __FUNCTION__);
-                // dump_bio_wrapper(bio_wrapper->bio);
                 if (bio_data_dir(bio_wrapper->bio) == WRITE) {
                         bio_wrapper_add_meta();
                 }
 
                 pr_info("get wrapper ok, count:%llu|bio:%p\n", ++count, bio_wrapper->bio);
-                //dump_bio_wrapper(bio_wrapper);
 
                 submit_bio_list(&bio_wrapper->bio_list);
-                // bio_wrapper->bio->bi_bdev = minidev->bdev;
-                // generic_make_request(bio_wrapper->bio);
-                // free_bio_wrapper(bio_wrapper);
-                // msleep(100);
-        }
+	}
 
         return 0;
 }
-
 
 static int minidev_make_request(struct request_queue *q, struct bio *bio)
 {
@@ -79,7 +70,6 @@ static int minidev_make_request(struct request_queue *q, struct bio *bio)
         static uint64_t count = 0;
         struct bio_wrapper *wrapper;
 
-        //dump_bio(bio, __FUNCTION__);
         wrapper = init_bio_wrapper(bio, hadm_bio_end_io);
         if (wrapper == NULL) {
                 bio_endio(bio, -EIO);
@@ -93,40 +83,7 @@ static int minidev_make_request(struct request_queue *q, struct bio *bio)
         }
         pr_info("make request handler count: %llu.bio:%p\n", ++count, bio);
 
-        //dump_wrapper_list(bio_wrapper_list, __FUNCTION__);
-        //free_bio_wrapper(wrapper);
-	// invalidate_mapping_pages(minidev->bdev->bd_inode->i_mapping, 0, -1);
-	// dump_bio(bio);
-        //bio->bi_bdev = minidev->bdev;
-        //generic_make_request(bio);
-        return 0;
-}
-
-static struct srl *init_srl(const char *disk)
-{
-        struct srl *srl;
-        struct block_device *bdev;
-
-        srl = kzalloc(sizeof(struct srl), GFP_KERNEL);
-        if (srl == NULL)
-                return NULL;
-
-        bdev = blkdev_get_by_path(disk, FMODE_READ | FMODE_WRITE, minidev);
-        if(IS_ERR(bdev)) {
-                printk(KERN_INFO "open bdev fail!");
-                goto err_bdev;
-        }
-        srl->bdev = bdev;
-	spin_lock_init(&srl->lock);
-	sema_init(&srl->sema, 0);
-        atomic64_set(&srl->tail, 0);
-        atomic64_set(&srl->disk_tail, 0);
-        atomic64_set(&srl->head, 0);
-
-        return srl;
-err_bdev:
-        kfree(srl);
-        return NULL;
+	return 0;
 }
 
 static int init_minidev(struct minidev *dev, struct srl *srl)
@@ -200,7 +157,7 @@ static int __init minidev_init(void)
                 goto fail;
         }
 
-        srl = init_srl(SRLDEV_BDEV);
+        srl = init_srl(SRLDEV_BDEV, minidev);
         if (srl == NULL) {
                 return -ENOMEM;
         }

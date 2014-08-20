@@ -8,16 +8,6 @@
 #define MINIDEV_BDEV		"/dev/sdc"
 #define SRLDEV_BDEV             "/dev/sdb"
 #define MAX_BUFFER_SIZE (1 << 1)
-struct buffer;
-
-struct srl {
-        atomic64_t head;
-        atomic64_t tail;
-	atomic64_t disk_tail;
-	struct semaphore sema;
-        spinlock_t lock;
-        struct block_device *bdev;
-};
 
 struct minidev {
         struct task_struct *task;

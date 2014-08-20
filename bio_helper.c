@@ -10,6 +10,7 @@
 #include <linux/bio.h>
 
 #include "bio_helper.h"
+#include "srl.h"
 #include "buffer.h"
 
 extern struct minidev *minidev;
@@ -26,17 +27,11 @@ void hadm_bio_end_io(struct bio *bio, int err)
 	bio_struct = (struct bio_struct *)bio->bi_private;
 	bio_w = bio_struct->wrapper;
 
-	pr_info("handler bio READ begin");
-
-	pr_info("handler bio READ end");
-
 	if (err) {
 		bio_w->err |= err;
 		buffer_inuse_del_occd(minidev->buffer);
 	} else if(bio_data_dir(bio_w->bio) == READ) {
 		pr_info("copy bio data\n");
-		//pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
-		//memset(page_address(bio_w->bio->bi_io_vec[0].bv_page), 'C', PAGE_SIZE);
 		src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
 		if (src == NULL) {
 			pr_info("BUG!!!!!!!!!! src is NULL.");
@@ -44,7 +39,6 @@ void hadm_bio_end_io(struct bio *bio, int err)
 			memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
 					page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
 		}
-		//memcpy(page_address(bvec->bv_page), page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
 	} else {
 		page = bio->bi_io_vec[1].bv_page;
 		get_page(page);
@@ -64,7 +58,6 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		free_bio_wrapper(bio_w);
 	}
 
-	pr_info("===== hadm_bio_end_io =====");
 }
 
 void hadm_bio_list_free(struct list_head *bio_list)
@@ -81,7 +74,6 @@ void hadm_bio_list_free(struct list_head *bio_list)
 int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 {
 	struct list_head *bio_list = &wrapper->bio_list;
-	//struct bio_list *bio_list;
 	struct srl_data *srl_data = NULL;
 	struct bio_struct *bio_struct;
 	struct bio *bio;
@@ -92,15 +84,8 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 	void *addr_src;
 	int i;
 
-	//	bio_list = kmalloc(GFP_KERNEL, sizeof(struct bio_list));
-	//	if(bio_list == NULL) {
-	//		return NULL;
-	//	}
-	//	bio_list_init(bio_list);
-
 	bio_src = wrapper->bio;
 	bio_for_each_segment(bvec, bio_src, i) {
-		//pr_info("---------------split bio--------------------\n");
 		bio = bio_alloc(GFP_NOIO, 1);
 		if(bio == NULL) {
 			goto err_bio;
@@ -131,7 +116,8 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 
 			bio->bi_bdev = minidev->srl->bdev;
 			bio->bi_sector = srl_tail(minidev->srl);
-			/* srl tail increase in the endio! sync model*/
+
+			/* srl disk_tail increase in the endio! sync model*/
 			srl_tail_inc(minidev->srl);
 			pr_info("write srl: srl sector:%lu.\n", bio->bi_sector);
 		} else {
@@ -156,7 +142,6 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 			goto err_bio;
 		}
 
-		//dump_bio(bio, __FUNCTION__);
 		bio_struct = init_bio_struct(bio, wrapper, srl_data, i);
 		if (bio_struct == NULL) {
 			bio_free_pages(bio);
@@ -166,8 +151,6 @@ int hadm_bio_split(struct bio_wrapper *wrapper, bio_end_io_t *bi_end_io)
 		bio->bi_private = bio_struct;
 
 		list_add_tail(&bio_struct->list, &wrapper->bio_list);
-		//pr_info("---------------split bio end-------");
-		//bio_list_add(bio_list, bio);
 	}
 
 	pr_info("after split bio, wrapper count:%d.\n", atomic_read(&wrapper->count));
@@ -230,50 +213,41 @@ void submit_bio_list(struct list_head *bio_list)
 	struct bio_struct *bio_struct;
 	struct srl_data *buffer_data;
 	void *src_addr;
-	//static unsigned long count = 0;
 
 	/* FIXME buffer full? at least one bio in the list */
 	list_for_each_entry(bio_struct, bio_list, list) {
-		//pr_info("===== submit bio =====");
 
 		bio = bio_struct->bio;
-		//pr_info("submit list bio: %p\n", bio);
-		dump_bio(bio, __FUNCTION__);
-		//		if (bio_data_dir(bio) == WRITE) {
-		//			pr_content(page_address(bio->bi_io_vec[0].bv_page), 512);
-		//			pr_c_content(page_address(bio->bi_io_vec[1].bv_page), 512);
-		//		}
-		schedule();             /* FIXME XXOOXX */
+		//dump_bio(bio, __FUNCTION__);
 		//msleep(10);
+		schedule();             /* FIXME XXOOXX */
 
 		if (bio_data_dir(bio) == READ) {
 			buffer_data = get_find_data(minidev->buffer, bio->bi_sector);
 			if (buffer_data != NULL) {
 				pr_info("find data in buffer.!!!!!!\n");
 				src_addr = page_address(buffer_data->data_page);
-//				pr_c_content(src_addr, 512);
-//				//dst_addr = page_address(bio->bi_io_vec[0].bv_page);
-//				memcpy(dst_addr, src_addr, PAGE_SIZE);
-//
-//				if (atomic_dec_and_test(&bio_wrapper->count)) {
-//					bio_endio(bio_w->bio, 0);
-//				}
-//				bio = bio->bi_next;
-//				continue;
+				pr_c_content(src_addr, 512);
+				/*
+				dst_addr = page_address(bio->bi_io_vec[0].bv_page);
+				memcpy(dst_addr, src_addr, PAGE_SIZE);
+
+				if (atomic_dec_and_test(&bio_wrapper->count)) {
+					bio_endio(bio_w->bio, 0);
+				}
+				bio = bio->bi_next;
+				continue;
+				*/
 			} else {
 				pr_info("not find the data.");
 			}
 
 		} else {
-			//pr_info("submit write bio %lu times.\n", ++count);
 			buffer_inuse_pre_occu(minidev->buffer);
 		}
 
-		//dump_bio(bio, __FUNCTION__);
 		submit_bio(bio->bi_rw, bio);
 	}
-	// hadm_bio_list_free(bio_list);
-	// bio_endio(bio_w->bio, 0);       /* endio? */
 }
 
 struct bio_wrapper_list *init_bio_wrapper_list(uint64_t maxsize)
@@ -418,8 +392,6 @@ void dump_bio(struct bio *bio, const char *msg)
 
 void __dump_bio_wrapper(struct bio *bio)
 {
-	// struct bio_vec *bvec;
-	// int i;
 
 	pr_info("============wrapper=============");
 	pr_info("bio->sector = %lu", (unsigned long)bio->bi_sector);
@@ -427,15 +399,6 @@ void __dump_bio_wrapper(struct bio *bio)
 	pr_info("bio->bi_idx = %u", bio->bi_idx);
 	pr_info("bio->bi_size = %u", bio->bi_size);
 	pr_info("=========================");
-	/*
-	   bio_for_each_segment(bvec, bio, i) {
-	   pr_info("bvec index = %d", i);
-	   pr_info("bvec->bv_len = %u", bvec->bv_len);
-	   pr_info("bvec->bv_offset = %u", bvec->bv_offset);
-	   pr_info("----------------------");
-	   }
-	   pr_info("=========================");
-	   */
 }
 
 struct bio_struct *init_bio_struct(struct bio* bio, struct bio_wrapper *wrapper,
@@ -538,43 +501,11 @@ int bio_add_meta_page(struct bio *bio)
 
 	pr_info("add meta success, meta->sector:%lu.\n",
 			meta->disk_sector);
-	//pr_content(meta, 512);
 	return 0;
 
 err:
 	__free_page(page);
 	return -1;
-}
-
-sector_t srl_tail(struct srl *srl)
-{
-	return atomic64_read(&srl->tail);
-}
-
-sector_t srl_disk_tail(struct srl *srl)
-{
-	return atomic64_read(&srl->disk_tail);
-}
-
-sector_t srl_head(struct srl *srl)
-{
-	return atomic64_read(&srl->head);
-}
-
-void srl_tail_inc(struct srl *srl)
-{
-	atomic64_add(9, &srl->tail);
-}
-
-void srl_disk_tail_inc(struct srl *srl)
-{
-	atomic64_add(9, &srl->disk_tail);
-	up(&srl->sema);
-}
-
-void srl_head_inc(struct srl *srl)
-{
-	atomic64_add(9, &srl->head);
 }
 
 void bio_free_pages(struct bio *bio)
