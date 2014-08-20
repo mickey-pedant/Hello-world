@@ -32,9 +32,13 @@ struct data_buffer {
 struct data_buffer *init_data_buffer(uint64_t maxsize);
 void free_data_buffer(struct data_buffer *buffer);
 int buffer_is_full(struct data_buffer *buffer);
+int buffer_inuse_is_full(struct data_buffer *buffer);
 
 struct srl_data *get_find_data(struct data_buffer *buffer, sector_t disk_sector);
 int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data);
+void buffer_inuse_pre_occu(struct data_buffer *buffer);
+void buffer_inuse_del_occd(struct data_buffer *buffer);
+void buffer_data_add_occd(struct data_buffer *buffer, struct srl_data *srl_data);
 void buffer_inuse_del(struct data_buffer *buffer);
 
 #endif          /* __BIO_BUFFER */

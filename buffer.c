@@ -89,7 +89,18 @@ int buffer_is_full(struct data_buffer *buffer)
 	int ret;
 
 	spin_lock(&buffer->lock);
-	ret = buffer->size == buffer->maxsize;
+	ret = buffer->data_size == buffer->maxsize;
+	spin_unlock(&buffer->lock);
+
+	return ret;
+}
+
+int buffer_inuse_is_full(struct data_buffer *buffer)
+{
+	int ret;
+
+	spin_lock(&buffer->lock);
+	ret = buffer->inuse_size == buffer->maxsize;
 	spin_unlock(&buffer->lock);
 
 	return ret;
@@ -103,52 +114,47 @@ struct srl_data *get_find_data(struct data_buffer *buffer, sector_t disk_sector)
 	pr_info("begin search for the buffer.search sector:%lu\n", disk_sector);
 	spin_lock(&buffer->lock);
 	dump_buffer_inuse(buffer);
-	/* manual construct the search list */
-	//buffer->data_list.prev->next = &buffer->head;
 	list_for_each_entry_reverse(data_iter, &buffer->inuse_list, list_inuse) {
 		if (data_iter->disk_sector == disk_sector) {
 			srl_data = data_iter;
 			break;
 		}
 	}
-	//buffer->head.prev->next = &buffer->data_list;
 	spin_unlock(&buffer->lock);
 
 	return srl_data;
 }
 
+/* the caller make sure get the lock before */
 static void __buffer_trunc(struct data_buffer *buffer)
 {
 	struct srl_data *head_data;
 	struct srl_data *data_iter;
 	struct srl_data *tmp_data;
 
-	spin_lock(&buffer->lock);
 	head_data = list_first_entry(&buffer->inuse_list, struct srl_data, list_inuse);
 	list_for_each_entry_safe(data_iter, tmp_data, &buffer->data_list,
 			list) {
 		if (data_iter == head_data) {
 			break;
 		}
-		buffer->size--;
+		buffer->data_size--;
 		list_del(&data_iter->list);
 		free_srl_data(data_iter);
 	}
-	spin_unlock(&buffer->lock);
 }
 
-int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
+static int __buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 {
-	if (buffer_is_full(buffer)) {
+	if (buffer->data_size == buffer->maxsize) {
 		pr_info("buffer is full\n");
 		__buffer_trunc(buffer);
 	}
 
-	if (buffer_is_full(buffer)) {
+	if (buffer->data_size == buffer->maxsize) {
 		return -1;
 	}
 
-	spin_lock(&buffer->lock);
 	list_add_tail(&srl_data->list, &buffer->data_list);
 	list_add_tail(&srl_data->list_inuse, &buffer->inuse_list);
 	pr_info("bufer add sector:%lu.\n", srl_data->disk_sector);
@@ -156,16 +162,74 @@ int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
 	//dump_buffer_inuse(buffer);
 	buffer->data_size++;
 	buffer->inuse_size++;
-	spin_unlock(&buffer->lock);
 
 	return 0;
+}
+
+int buffer_data_add(struct data_buffer *buffer, struct srl_data *srl_data)
+{
+	int ret;
+
+	spin_lock(&buffer->lock);
+	ret = __buffer_data_add(buffer, srl_data);
+	spin_unlock(&buffer->lock);
+
+	return ret;
+}
+
+/*
+ * increase size before add the element,
+ * guarentee buffer_add_data() success in IRQ
+ * */
+void buffer_inuse_pre_occu(struct data_buffer *buffer)
+{
+try_occupy:
+	spin_lock(&buffer->lock);
+
+	if (buffer->inuse_size == buffer->maxsize) {
+		spin_unlock(&buffer->lock);
+		wait_for_completion(&buffer->compl);
+		goto try_occupy;
+	}
+
+	buffer->inuse_size++;
+	buffer->data_size++;
+	pr_info("pre occu:inuse_size:%lu|data_size:%lu.\n",
+			buffer->inuse_size,
+			buffer->data_size);
+	spin_unlock(&buffer->lock);
+}
+
+void buffer_inuse_del_occd(struct data_buffer *buffer)
+{
+	spin_lock(&buffer->lock);
+	buffer->data_size--;
+	buffer->inuse_size--;
+	if (buffer->inuse_size == buffer->maxsize - 1) {
+		complete(&buffer->compl);
+	}
+	spin_unlock(&buffer->lock);
+}
+
+/**
+ *
+ */
+void buffer_data_add_occd(struct data_buffer *buffer, struct srl_data *srl_data)
+{
+	spin_lock(&buffer->lock);
+
+	buffer->inuse_size--;
+	buffer->data_size--;
+	if (__buffer_data_add(buffer, srl_data) < 0)
+		BUG();
+
+	spin_unlock(&buffer->lock);
 }
 
 void buffer_inuse_del(struct data_buffer *buffer)
 {
 
 	spin_lock(&buffer->lock);
-	//dump_buffer_inuse(buffer);
 	if (!list_empty(&buffer->inuse_list)) {
 		list_del(buffer->inuse_list.next);
 		buffer->inuse_size--;
@@ -173,6 +237,5 @@ void buffer_inuse_del(struct data_buffer *buffer)
 			complete(&buffer->compl);
 		}
 	}
-	//dump_buffer_inuse(buffer);
 	spin_unlock(&buffer->lock);
 }

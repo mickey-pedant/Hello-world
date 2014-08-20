@@ -31,6 +31,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 
 	if (err) {
 		bio_w->err |= err;
+		buffer_inuse_del_occd(minidev->buffer);
 	} else if(bio_data_dir(bio_w->bio) == READ) {
 		pr_info("copy bio data\n");
 		//pr_c_content(page_address(bio->bi_io_vec[0].bv_page), 512);
@@ -50,10 +51,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		srl_data->data_page = page;
 
 		/* guarantee in submit phase */
-		if (buffer_data_add(minidev->buffer, srl_data) < 0) {
-			BUG();
-		}
-
+		buffer_data_add_occd(minidev->buffer, srl_data);
 	}
 
 	if (atomic_dec_and_test(&bio_w->count)) {
@@ -261,11 +259,9 @@ void submit_bio_list(struct list_head *bio_list)
 			}
 
 		} else {
-			if (buffer_is_full(minidev->buffer)) {
-				pr_info("list is full, wait for sync...--------------------------\n");
-				wait_for_completion(&minidev->buffer->compl);
-			}
+			buffer_inuse_pre_occu(minidev->buffer);
 		}
+
 		//dump_bio(bio, __FUNCTION__);
 		submit_bio(bio->bi_rw, bio);
 	}
