@@ -34,7 +34,7 @@ void hadm_bio_end_io(struct bio *bio, int err)
 		pr_info("copy bio data\n");
 		src = page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page);
 		if (src == NULL) {
-			pr_info("BUG!!!!!!!!!! src is NULL.");
+			pr_info("BUG!!!!!!!!! src is NULL.");
 		} else {
 			memcpy(page_address(bio_w->bio->bi_io_vec[bio_struct->idx].bv_page),
 					page_address(bio->bi_io_vec[0].bv_page), PAGE_SIZE);
